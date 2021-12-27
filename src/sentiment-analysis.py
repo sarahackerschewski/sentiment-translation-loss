@@ -6,6 +6,7 @@ import csv
 import numpy as np
 from os import listdir
 import re
+import deepl
 from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.stem.lancaster import LancasterStemmer
 from sklearn.feature_selection import chi2
@@ -57,8 +58,11 @@ def preprocess(sequences):
     wn_lem = WordNetLemmatizer()
     for sequence in sequences:
         # remove any HTML tags
+        #print("before ", sequence)
+        sequence = sequence.lower()
         sequence = re.sub(r'<.*?>', '', sequence)
-        sequence = re.sub(r'\d+', '', sequence)
+        sequence = re.sub(r'[^a-züäöß ]*', '', sequence)
+        #print("after ", sequence)
 
         new_seq = ""
         for i, word in enumerate(sequence.split()):
@@ -76,19 +80,6 @@ def _replace_abbrevations(word):
     common_abbr = {}
     #if word in common_abbr.keys():
 
-
-def translate(sentences):
-    """
-
-    :param filename:
-    :return:
-    """
-    # translator can only deal with max. 500000 characters
-    while sum(len(i) for i in sentences) > 500000:
-        random.shuffle(sentences)
-        sentences = sentences[:-1]
-
-    return sentences
 
 def sentiment_classifier(x_train, y_train, x_test):
     """
@@ -157,44 +148,42 @@ def evaluate(gold, predicted, verbose=True):
 
 def create_test():
     # read negative reviews
-    neg_files = listdir("../data/English_test/neg/")
+    neg_files = listdir("../data/English_test_data/neg/")
     random.shuffle(neg_files)
     neg_files = neg_files
     neg, text = [], []
 
     for file in neg_files:
         if len(neg) <= 5000:
-            file = "../data/English_test/neg/" + file
+            file = "../data/English_test_data/neg/" + file
             print(file)
             content = open(file, "r", encoding="UTF-8").read()
             text.append(content)
 
-            for review in text:
-                tokens = sent_tokenize(review)
-                for token in tokens:
-                    if len(token) > 10:
-                        neg.append(token)
+        for review in text:
+            tokens = sent_tokenize(review)
+            for token in tokens:
+                neg.append(token)
 
     label_neg = ["negative" for i in range(len(neg))]
 
     # read positive reviews
-    pos_files = listdir("../data/English_test/pos/")
+    pos_files = listdir("../data/English_test_data/pos/")
     random.shuffle(pos_files)
     pos_files = pos_files
     pos, text = [], []
 
     for file in pos_files:
         if len(pos) <= 5000:
-            file = "../data/English_test/pos/" + file
+            file = "../data/English_test_data/pos/" + file
             print(file)
             content = open(file, "r", encoding="UTF-8").read()
             text.append(content)
 
-            for review in text:
-                tokens = sent_tokenize(review)
-                for token in tokens:
-                    if len(token) > 10:
-                        pos.append(token)
+        for review in text:
+            tokens = sent_tokenize(review)
+            for token in tokens:
+                    pos.append(token)
 
     label_pos = ["positive" for i in range(len(pos))]
 
@@ -208,7 +197,8 @@ def create_test():
     with open('../data/test_movie_reviews_english_tokenized.csv', 'wt', encoding="UTF-8") as out_file:
         csv_writer = csv.writer(out_file, delimiter=";")
         for i, sent in enumerate(test):
-            csv_writer.writerow([gold[i], sent])
+            if len(sent) > 1:
+                csv_writer.writerow([gold[i], sent])
 
     # read German reviews
     test = []
@@ -218,20 +208,42 @@ def create_test():
             if len(row) == 3:
                 tokenized = sent_tokenize(row[2], language="german")
 
-                for sent in tokenized:
-                    test.append(sent)
+                if row[1] in ["4", "5"]:
+                    for sent in tokenized:
+                        if len(sent) > 1:
+                            test.append(("positive", sent))
+                elif row[1] in ["1", "2"]:
+                    for sent in tokenized:
+                        if len(sent) > 1:
+                            test.append(("negative", sent))
     random.shuffle(test)
 
     # write file with tokenized German test data
     with open('../data/test_movie_reviews_german_tokenized.csv', 'w', encoding="UTF-8") as out_file:
         csv_writer = csv.writer(out_file, delimiter=';')
-        for sent in test:
-            print(sent)
-            csv_writer.writerow([sent])
+        for l, sent in test:
+            csv_writer.writerow([l, sent])
+
+
+def translate(sentences, labels):
+    """
+
+    :param filename:
+    :return:
+    """
+
+    with open("../data/translated_german_test_data.csv", "a", encoding="UTF-8") as file:
+        csv_writer = csv.writer(file, delimiter=";")
+        for i, text in enumerate(sentences):
+            translator = deepl.Translator(auth_key="b1ba14d4-7232-ff86-ed94-3599ccfa25dd:fx")
+
+            result = translator.translate_text(text, source_lang="DE", target_lang="EN-US")
+
+            csv_writer.writerow([labels[i], result.text])
 
 
 if __name__ == '__main__':
-
+    # create_test()
     # read training data
     train, labels = read_train_data(["../data/training_movie_reviews.txt"])
 
@@ -262,5 +274,55 @@ if __name__ == '__main__':
 
     # evaluation
     evaluate(gold, pred)
+    
+    # read German test data
+    """test2, gold2 = [], []
+    with open("../data/test_movie_reviews_german_tokenized.csv", "r", encoding="UTF-8") as f:
+        csv_reader = csv.reader(f, delimiter=";")
+
+        for i,row in enumerate(csv_reader):
+                if len(row) == 2:
+                    if row[0] == "negative":
+                        gold2.append(row[0])
+                        test2.append(row[1])
+
+                    elif row[0] == "positive":
+                        gold2.append(row[0])
+                        test2.append(row[1])
+
+    # translate test data
+
+    char_len = 0
+    trans_sent, trans_label = [], []
+    for i in range(0, len(test2)):
+        sent = test2[i]
+        if char_len + len(sent) <= 450000:
+            trans_sent.append(sent)
+            trans_label.append(gold2[i])
+            char_len += len(sent)
+        else:
+            break
+
+    translation = translate(sentences=trans_sent, labels=trans_label)
+    print(translation)
+
+    test2, gold2 = [], []
+    with open("../data/translated_german_test_data.csv", "r", encoding="UTF-8") as t_file:
+        csv_reader = csv.reader(t_file, delimiter=";")
+
+        for row in csv_reader:
+            if len(row) == 2:
+                test2.append(row[1])
+                gold2.append(row[0])
+
+    # pre-processing
+    test2 = preprocess(test2)
+
+    # classification
+    pred2 = sentiment_classifier(train, labels, test2)
+
+    # evaluation
+    print()
+    evaluate(gold2, pred2)"""
 
 
