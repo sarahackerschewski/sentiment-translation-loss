@@ -8,7 +8,6 @@ from os import listdir
 import re
 import deepl
 from nltk.stem.wordnet import WordNetLemmatizer
-from nltk.stem.lancaster import LancasterStemmer
 from sklearn.feature_selection import chi2
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_selection import SelectFpr
@@ -18,6 +17,61 @@ from sklearn.metrics import precision_recall_fscore_support
 from sklearn.metrics import accuracy_score
 from nltk import sent_tokenize
 
+abbr_slang_dict = {"awsm": "awesome",
+                   "adorbs": "adorable",
+                   "asap": "as soon as possible",
+                   "bc": "because",
+                   "btw": "by the way",
+                   "bts": "behind the scenes",
+                   "cmv": "change my view",
+                   "dae": "does anyone else",
+                   "eom": "end of message",
+                   "eot": "end of thread",
+                   "fwiw": "for what it is worth",
+                   "fyi": "for your information",
+                   "ftw": "for the win",
+                   "hes": "he is",
+                   "hth": "hope this helps",
+                   "icymi": "in case you missed it",
+                   "idc": "i do not care",
+                   "idk": "i do not know",
+                   "im": "i am",
+                   "imo": "in my opinion",
+                   "mho": "in my humble opinion",
+                   "irl": "in real life",
+                   "iirc": "if i remember correctly",
+                   "jk": "just kidding",
+                   "lmk": "let me know",
+                   "l8r": "later",
+                   "lmao": "laughing my ass off",
+                   "lol": "laughing out loud",
+                   "luv": "love",
+                   "nm": "nevermind",
+                   "nvm": "nevermind",
+                   "noob": "newcomer",
+                   "ooak": "one of a kind",
+                   "ofc": "of course",
+                   "ok": "okay",
+                   "omg": "oh my god",
+                   "otoh": "on the other hand",
+                   "rn": "right now",
+                   "shes": "she is",
+                   "smh": "shaking my head",
+                   "tbh": "to be honest",
+                   "theyre": "they are",
+                   "til": "today i learned",
+                   "tmi": "too much information",
+                   "totes": "totally",
+                   "u": "you",
+                   "w/": "with",
+                   "w/o": "without",
+                   "wth": "what the hell",
+                   "wtf": "what the fuck",
+                   "y": "why",
+                   "youre": "you are",
+                   "yw": "you are welcome",
+                   "ywa": "you are welcome anyway",
+                   "&": "and"}
 
 def read_train_data(filename_s):
     """
@@ -58,27 +112,29 @@ def preprocess(sequences):
     wn_lem = WordNetLemmatizer()
     for sequence in sequences:
         # remove any HTML tags
-        #print("before ", sequence)
         sequence = sequence.lower()
         sequence = re.sub(r'<.*?>', '', sequence)
+
+        seq_list = sequence.split()
+        seq_list = list(map(lambda word: _replace_abbrevations(word), seq_list))
+        sequence = ' '.join(seq_list)
+
         sequence = re.sub(r'[^a-züäöß ]*', '', sequence)
-        #print("after ", sequence)
 
-        new_seq = ""
-        for i, word in enumerate(sequence.split()):
-            # stemmer or lemmatizer ?? => so far better results with lemmatizer
-            if i == 0:
-                new_seq += wn_lem.lemmatize(word)
-            else:
-                new_seq += " " + wn_lem.lemmatize(word)
 
-        preprocessed_sequences.append(new_seq)
+        seq_list = sequence.split()
+        seq_list = list(map(lambda word: wn_lem.lemmatize(word), seq_list))
+        sequence = ' '.join(seq_list)
+
+        preprocessed_sequences.append(sequence)
 
     return preprocessed_sequences
 
+
 def _replace_abbrevations(word):
-    common_abbr = {}
-    #if word in common_abbr.keys():
+    if word in abbr_slang_dict.keys():
+        return abbr_slang_dict[word]
+    return word
 
 
 def sentiment_classifier(x_train, y_train, x_test):
@@ -94,6 +150,7 @@ def sentiment_classifier(x_train, y_train, x_test):
     tfidf.fit(x_train)
     enc_x_train = tfidf.transform(x_train)
     enc_x_test = tfidf.transform(x_test)
+    print()
     print(enc_x_train.shape)
     le = LabelEncoder()
     enc_y_train = le.fit_transform(y_train)
@@ -294,7 +351,7 @@ if __name__ == '__main__':
 
     char_len = 0
     trans_sent, trans_label = [], []
-    for i in range(0, len(test2)):
+    for i in range(0, len(test2)-2000):
         sent = test2[i]
         if char_len + len(sent) <= 450000:
             trans_sent.append(sent)
@@ -304,7 +361,7 @@ if __name__ == '__main__':
             break
 
     translation = translate(sentences=trans_sent, labels=trans_label)
-    print(translation)
+    print(translation)"""
 
     test2, gold2 = [], []
     with open("../data/translated_german_test_data.csv", "r", encoding="UTF-8") as t_file:
@@ -322,7 +379,6 @@ if __name__ == '__main__':
     pred2 = sentiment_classifier(train, labels, test2)
 
     # evaluation
-    print()
-    evaluate(gold2, pred2)"""
+    evaluate(gold2, pred2)
 
 
