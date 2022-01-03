@@ -3,7 +3,6 @@
 """
 import random
 import csv
-import numpy as np
 from os import listdir
 import re
 import deepl
@@ -13,9 +12,11 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_selection import SelectFpr
 from sklearn.preprocessing import LabelEncoder
 from sklearn import svm
+from sklearn.model_selection import cross_val_score
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.metrics import accuracy_score
 from nltk import sent_tokenize
+from textblob import TextBlob
 
 abbr_slang_dict = {"awsm": "awesome",
                    "adorbs": "adorable",
@@ -137,7 +138,7 @@ def _replace_abbrevations(word):
     return word
 
 
-def sentiment_classifier(x_train, y_train, x_test):
+def sentiment_classifier(x_train, y_train, x_test, C=1.0):
     """
 
     :return:
@@ -150,8 +151,6 @@ def sentiment_classifier(x_train, y_train, x_test):
     tfidf.fit(x_train)
     enc_x_train = tfidf.transform(x_train)
     enc_x_test = tfidf.transform(x_test)
-    print()
-    print(enc_x_train.shape)
     le = LabelEncoder()
     enc_y_train = le.fit_transform(y_train)
 
@@ -159,12 +158,32 @@ def sentiment_classifier(x_train, y_train, x_test):
     chi_sq = SelectFpr(chi2, alpha=0.95)
     enc_x_train = chi_sq.fit_transform(enc_x_train, enc_y_train)
     enc_x_test = chi_sq.transform(enc_x_test)
-    print(enc_x_train.shape)
 
-    classifier = svm.LinearSVC(C=0.425)
+    classifier = svm.LinearSVC(C=C)
+    # cross-validation
+    scores = cross_val_score(classifier, enc_x_train, enc_y_train, cv=10, scoring="accuracy")
+
+    print("10-fold cross-validation:")
+    print("Accuracy: %0.2f; SD: %0.2f" % (scores.mean(), scores.std()))
+
     classifier.fit(enc_x_train, enc_y_train)
 
     return le.inverse_transform(classifier.predict(enc_x_test))
+
+
+def lexicon_based_analyzer_eng(data):
+    pred = []
+    for sent in data:
+        seq_list = list(map(lambda word: _replace_abbrevations(word), sent.split()))
+        sent = ' '.join(seq_list)
+        sentiment = TextBlob(sent).sentiment.polarity
+        if sentiment < 1:
+            pred.append("positive")
+        elif sentiment > 0:
+            pred.append("negative")
+        else:
+            pred.append("_")
+    return pred
 
 
 def evaluate(gold, predicted, verbose=True):
@@ -178,17 +197,17 @@ def evaluate(gold, predicted, verbose=True):
     precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(gold, predicted, average="macro")
     acc_macro = accuracy_score(gold, predicted)
 
-    precision_neg, recall_neg, f1_neg, _ = precision_recall_fscore_support(gold, predicted,
+    """precision_neg, recall_neg, f1_neg, _ = precision_recall_fscore_support(gold, predicted,
                                                                            average="binary", pos_label="negative")
     precision_pos, recall_pos, f1_pos, _ = precision_recall_fscore_support(gold, predicted,
-                                                                           average="binary", pos_label="positive")
+                                                                           average="binary", pos_label="positive")"""
     if verbose:
         print("Precision (macro-average): ", precision_macro)
         print("Recall (macro-average): ", recall_macro)
         print("F1-Score (macro-average): ", f1_macro)
         print("Accuracy: ", acc_macro)
 
-        print()
+        """print()
 
         print("Precision (negative): ", precision_neg)
         print("Recall (negative): ", recall_neg)
@@ -198,9 +217,9 @@ def evaluate(gold, predicted, verbose=True):
 
         print("Precision (positive): ", precision_pos)
         print("Recall (positive): ", recall_pos)
-        print("F1-Score (positive): ", f1_pos)
+        print("F1-Score (positive): ", f1_pos)"""
 
-    return precision_macro, recall_macro, f1_macro
+    return precision_macro, recall_macro, f1_macro, acc_macro
 
 
 def create_test():
@@ -324,14 +343,19 @@ if __name__ == '__main__':
 
     # pre-processing
     train = preprocess(train)
-    test = preprocess(test)
-    
-    # classification
-    pred = sentiment_classifier(train, labels, test)
+    preprocessed_test = preprocess(test)
 
-    # evaluation
-    evaluate(gold, pred)
-    
+    print("English data:")
+    C = 1.1
+    pred = sentiment_classifier(train, labels, preprocessed_test, C=C)
+    print("\nEvaluation SVM")
+    _, _, _, accuracy = evaluate(gold, pred, verbose=True)
+
+
+    print("\nEvaluation Lexicon-based")
+    lexicon_pred = lexicon_based_analyzer_eng(test)
+    _, _, _, acc = evaluate(gold, lexicon_pred, verbose=True)
+
     # read German test data
     """test2, gold2 = [], []
     with open("../data/test_movie_reviews_german_tokenized.csv", "r", encoding="UTF-8") as f:
@@ -372,13 +396,17 @@ if __name__ == '__main__':
                 test2.append(row[1])
                 gold2.append(row[0])
 
-    # pre-processing
-    test2 = preprocess(test2)
+    preprocessed_test2 = preprocess(test2)
 
-    # classification
-    pred2 = sentiment_classifier(train, labels, test2)
+    print("\nGerman data:")
+    C = 1.1
+    pred2 = sentiment_classifier(train, labels, preprocessed_test2, C=C)
+    print("\nEvaluation SVM")
+    _, _, _, _ = evaluate(gold2, pred2, verbose=True)
 
-    # evaluation
-    evaluate(gold2, pred2)
+
+    print("\nEvaluation Lexicon-based")
+    lexicon_pred2 = lexicon_based_analyzer_eng(test2)
+    _, _, _, _ = evaluate(gold2, lexicon_pred2, verbose=True)
 
 
