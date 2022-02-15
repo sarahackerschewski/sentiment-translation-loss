@@ -24,19 +24,27 @@ def read_train_data():
     count = 0
     with open("../data/MT_data/europarl-v7.de-en.de", "r", encoding="UTF-8") as de_f:
         for line in de_f.readlines():
-            if count <= 10000:
+            if count <= 50000:
                 line = line.strip()
                 german_sent.append(line)
                 count += 1
+    with open("../data/MT_data/german.txt", "w+", encoding="UTF-8") as de_out:
+        for line in german_sent:
+            de_out.write(line)
+            de_out.write("\n")
 
     english_sent = []
     count = 0
     with open("../data/MT_data/europarl-v7.de-en.en", "r", encoding="UTF-8") as en_f:
         for line in en_f.readlines():
-            if count <= 10000:
+            if count <= 50000:
                 line = line.strip()
                 english_sent.append(line)
                 count += 1
+    with open("../data/MT_data/english.txt", "w+", encoding="UTF-8") as en_out:
+        for line in english_sent:
+            en_out.write(line)
+            en_out.write("\n")
 
     return german_sent, english_sent
 
