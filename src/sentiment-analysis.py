@@ -75,7 +75,7 @@ def preprocess(sequences):
     return preprocessed_sequences
 
 
-def sentiment_classifier(x_train, y_train, x_test, C=1.0, save_pred=False, y_test=None, filename=""):
+def sentiment_classifier(x_train, y_train, x_test, C=375, save_pred=False, y_test=None, filename=""):
     """
     Data Transformation: creates feature vectors for the data; performs Chi-squared feature selection
     Model: builds a LinearSVM, validated with 10-fold cross-validation and fitted with transformed training data
