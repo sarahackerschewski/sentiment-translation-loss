@@ -2,10 +2,11 @@
 Author: Sarah Ackerschewski
 Bachelor Thesis
 WS 21/22
+Supervisor: Cagri Cöltekin
 
 This file contains all methods for tokenizing,
 randomizing and creating the test data for the sentiment analysis.
-It also contains code for translating the German test data to English.
+It also contains code for two different methods for translating the German test data to English.
 """
 
 from os import listdir
@@ -18,9 +19,11 @@ import machine_translation as mt
 
 def create_test():
     """
-
-    :return:
+    tokenizes the English and German movie reviews and assigns each tokenized sentence
+    the sentiment of the overall review.
+    Writes each test set (English tokenized & German tokenized) as a csv file for opening
     """
+    # English test data
     # read negative reviews
     neg_files = listdir("../data/English_test_data/neg/")
     random.shuffle(neg_files)
@@ -28,6 +31,7 @@ def create_test():
     neg, text = [], []
 
     for file in neg_files:
+        # only 5000 negative & 5000 positive sentences in the file, otherwise files too big
         if len(neg) <= 5000:
             file = "../data/English_test_data/neg/" + file
             print(file)
@@ -103,9 +107,9 @@ def create_test():
 
 def translate(sentences, labels):
     """
-
-    :param filename:
-    :return:
+    uses DeepL API for translating the German data into English and writes them to a csv file
+    :param sentences: list of German sentences to translate
+    :param labels: list of corresponding labels to sentences
     """
     with open("../data/translated_german_test_data.csv", "a", encoding="UTF-8") as file:
         csv_writer = csv.writer(file, delimiter=";")
@@ -117,23 +121,28 @@ def translate(sentences, labels):
             csv_writer.writerow([labels[i], result.text])
 
 
-def translate_own_system(sentences, labels, mode):
+def transformer_translate(sentences, labels, mode):
     """
-
-    :param sentences:
-    :param labels:
-    :return:
+    uses MT system built in machine_translation.py to translate from German to English
+    :param sentences: list of German sentences to translate
+    :param labels: list of corresponding labels to sentences
+    :param mode: file mode for deciding if writing or appending to file
     """
-    with open("../data/google_translated_german_test_data.csv", mode, encoding="UTF-8") as file:
+    with open("../data/other_translated_german_test_data.csv", mode, encoding="UTF-8") as file:
         csv_writer = csv.writer(file, delimiter=";")
-        translator, tokenizer = mt.translator()
+
         for i, text in enumerate(sentences):
-            result = mt.predict_sequence(translator, tokenizer, text)
-            print(result)
+            result = mt.translate(text)
+
             csv_writer.writerow([labels[i], result])
 
 
 def create_test_data_hotel():
+    """
+    creates test data of another domain (hotel reviews) by tokenizing and
+    assigning the review sentiment to each tokenized sentence.
+    Writes randomized test data to a csv file
+    """
     hotel_test = []
     hotel_gold = []
     with open("../data/test_hotel_reviews_english.txt") as h_file:
@@ -166,10 +175,9 @@ def create_test_data_hotel():
 
 if __name__ == '__main__':
     # create_test()
-
     # create_test_data_hotel()
     # read German test data
-    test2, gold2 = [], []
+    """test2, gold2 = [], []
     neg, pos = 0,0
     with open("../data/test_movie_reviews_german_tokenized.csv", "r", encoding="UTF-8") as f:
         csv_reader = csv.reader(f, delimiter=";")
@@ -185,7 +193,7 @@ if __name__ == '__main__':
                     if pos <= 1000:
                         gold2.append(row[0])
                         test2.append(row[1])
-    # translate test data with Google Ajax Translation API
+    # translate test data with machine_translation.py
     length = 0
     translate_tuples = []
     trans_sent, trans_label = [], []
@@ -200,11 +208,11 @@ if __name__ == '__main__':
 
     for i, tpl in enumerate(translate_tuples):
         if i == 0:
-            translate_own_system(sentences=tpl[0], labels=tpl[1], mode="w+")
+            transformer_translate(sentences=tpl[0], labels=tpl[1], mode="w+")
         else:
-            translate_own_system(sentences=tpl[0], labels=tpl[1], mode="a")
+            transformer_translate(sentences=tpl[0], labels=tpl[1], mode="a")
 
-    """
+
    # translate test data  with DeepL
  
     char_len = 0

@@ -1,6 +1,15 @@
 """
+Author: Sarah Ackerschewski
+Bachelor Thesis
+WS 21/22
+Supervisor: Cagri Cöltekin
 
+This file contains the code for building a sentiment analyzer (LinearSVM).
+It also contains functions for reading the training data, preprocessing the data
+and evaluating the predictions by the SVM,
+as well as a function for applying the TextBlob sentiment lexicon to data.
 """
+
 import csv
 import re
 from nltk.stem.wordnet import WordNetLemmatizer
@@ -13,71 +22,13 @@ from sklearn.model_selection import cross_val_score
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.metrics import accuracy_score
 from textblob import TextBlob
-import test_data_creation
-
-abbr_slang_dict = {"awsm": "awesome",
-                   "adorbs": "adorable",
-                   "asap": "as soon as possible",
-                   "bc": "because",
-                   "btw": "by the way",
-                   "bts": "behind the scenes",
-                   "cmv": "change my view",
-                   "dae": "does anyone else",
-                   "eom": "end of message",
-                   "eot": "end of thread",
-                   "fwiw": "for what it is worth",
-                   "fyi": "for your information",
-                   "ftw": "for the win",
-                   "hes": "he is",
-                   "hth": "hope this helps",
-                   "icymi": "in case you missed it",
-                   "idc": "i do not care",
-                   "idk": "i do not know",
-                   "im": "i am",
-                   "imo": "in my opinion",
-                   "mho": "in my humble opinion",
-                   "irl": "in real life",
-                   "iirc": "if i remember correctly",
-                   "jk": "just kidding",
-                   "lmk": "let me know",
-                   "l8r": "later",
-                   "lmao": "laughing my ass off",
-                   "lol": "laughing out loud",
-                   "luv": "love",
-                   "nm": "nevermind",
-                   "nvm": "nevermind",
-                   "noob": "newcomer",
-                   "ooak": "one of a kind",
-                   "ofc": "of course",
-                   "ok": "okay",
-                   "omg": "oh my god",
-                   "otoh": "on the other hand",
-                   "rn": "right now",
-                   "shes": "she is",
-                   "smh": "shaking my head",
-                   "tbh": "to be honest",
-                   "theyre": "they are",
-                   "til": "today i learned",
-                   "tmi": "too much information",
-                   "totes": "totally",
-                   "u": "you",
-                   "w/": "with",
-                   "w/o": "without",
-                   "wth": "what the hell",
-                   "wtf": "what the fuck",
-                   "y": "why",
-                   "youre": "you are",
-                   "yw": "you are welcome",
-                   "ywa": "you are welcome anyway",
-                   "&": "and"}
 
 
 def read_train_data(filename_s):
     """
     reads the data from a given file and creates a list of tuples with the polarity and sequence
-    :param filename_s: path/name of the file to use;
-           defaults to the file "movieReviewSnippets_GroundTruth" from Hutto and Gilbert (2016)
-    :return: list of tuples -> (polarity, sequence)
+    :param filename_s: path/name of the file to use
+    :return: tuple of lists -> (sequences, polarity)
     """
     sequences = []
     labels = []
@@ -104,8 +55,9 @@ def read_train_data(filename_s):
 
 def preprocess(sequences):
     """
-
-    :return:
+    preprocesses the sentences by lemmatizing the sentences and removing HTML tags
+    :param sequences: the sentences to preprocess
+    :return: preprocessed sequences
     """
     preprocessed_sequences = []
     wn_lem = WordNetLemmatizer()
@@ -113,14 +65,6 @@ def preprocess(sequences):
         # remove any HTML tags
         sequence = sequence.lower()
         sequence = re.sub(r'<.*?>', '', sequence)
-
-        # no removing slang ==> can indicate sentiment
-        """seq_list = sequence.split()
-        seq_list = list(map(lambda word: _replace_abbrevations(word), seq_list))
-        sequence = ' '.join(seq_list)"""
-
-        # no removing non-alphabetic char ==> e.g. ASCII emojis also convey sentiment
-        # sequence = re.sub(r'[^a-züäöß ]*', '', sequence)
 
         seq_list = sequence.split()
         seq_list = list(map(lambda word: wn_lem.lemmatize(word), seq_list))
@@ -131,21 +75,17 @@ def preprocess(sequences):
     return preprocessed_sequences
 
 
-def _replace_abbrevations(word):
-    if word in abbr_slang_dict.keys():
-        return abbr_slang_dict[word]
-    return word
-
-
-def sentiment_classifier(x_train, y_train, x_test, C=1.0):
+def sentiment_classifier(x_train, y_train, x_test, C=1.0, save_pred=False, y_test=None, filename=""):
     """
-
-    :return:
+    Data Transformation: creates feature vectors for the data; performs Chi-squared feature selection
+    Model: builds a LinearSVM, validated with 10-fold cross-validation and fitted with transformed training data
+    :param x_train: training sentences
+    :param y_train: labels for the training sentences
+    :param x_test: test sentences
+    :param C: tuning parameter; Default=1.0
+    :return: polarity predictions for the test data, cross-validation results (were needed for tuning)
     """
-
-    # no stop words removing as they contain important words for sentiment like negation words
-    # and thus especially important for a lexical task such as sentiment analysis
-
+    # create TFDIF feature vectors
     tfidf = TfidfVectorizer(ngram_range=(1, 3))
     tfidf.fit(x_train)
     enc_x_train = tfidf.transform(x_train)
@@ -154,11 +94,13 @@ def sentiment_classifier(x_train, y_train, x_test, C=1.0):
     enc_y_train = le.fit_transform(y_train)
 
     # feature selection
-    chi_sq = SelectFpr(chi2, alpha=0.85)
+    chi_sq = SelectFpr(chi2, alpha=0.9)
     enc_x_train = chi_sq.fit_transform(enc_x_train, enc_y_train)
     enc_x_test = chi_sq.transform(enc_x_test)
 
-    classifier = svm.LinearSVC(C=C)
+    # build sentiment classifier
+    classifier = svm.LinearSVC(C=C, max_iter=10000)
+
     # cross-validation
     scores = cross_val_score(classifier, enc_x_train, enc_y_train, cv=10, scoring="accuracy")
 
@@ -167,14 +109,49 @@ def sentiment_classifier(x_train, y_train, x_test, C=1.0):
 
     classifier.fit(enc_x_train, enc_y_train)
 
-    return le.inverse_transform(classifier.predict(enc_x_test)), (scores.mean(), scores.std())
+    predictions, tpl = le.inverse_transform(classifier.predict(enc_x_test)), (scores.mean(), scores.std())
+
+    # writes predictions, gold label and sentence to csv file
+    if save_pred:
+        path = "../results/results_" + filename + ".csv"
+        with open(path, "wt", encoding="UTF-8") as out_f:
+            csv_writer = csv.writer(out_f, delimiter=";")
+            for i, pred in enumerate(predictions):
+                csv_writer.writerow([pred, y_test[i], x_test[i]])
+
+    return predictions, tpl
+
+
+def evaluate(gold, predicted, verbose=True):
+    """
+    calculates macro-averaged precision, recall and F1-measure for the predictions
+    :param gold: "ideal" labels of the data
+    :param predicted: polarity predicitions by the
+    :param verbose: prints results to Console if True; Default: True
+    :return: evaluation results of each measure
+    """
+    precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(gold, predicted, average="macro")
+    acc_macro = accuracy_score(gold, predicted)
+
+    if verbose:
+        print("Precision (macro-average): ", precision_macro)
+        print("Recall (macro-average): ", recall_macro)
+        print("F1-Score (macro-average): ", f1_macro)
+        print("Accuracy: ", acc_macro)
+
+    return precision_macro, recall_macro, f1_macro, acc_macro
+
 
 
 def lexicon_based_analyzer_eng(data):
+    """
+    "predicts" the polarity for the given data with the TextBlob lexicon
+    :param data: sentences to classify as positive or negative
+    :return: classified sentences
+    """
     pred = []
+
     for sent in data:
-        seq_list = list(map(lambda word: _replace_abbrevations(word), sent.split()))
-        sent = ' '.join(seq_list)
         sentiment = TextBlob(sent).sentiment.polarity
         if sentiment < 1:
             pred.append("positive")
@@ -185,41 +162,6 @@ def lexicon_based_analyzer_eng(data):
     return pred
 
 
-def evaluate(gold, predicted, verbose=True):
-    """
-
-    :param gold:
-    :param predicted:
-    :param verbose:
-    :return:
-    """
-    precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(gold, predicted, average="macro")
-    acc_macro = accuracy_score(gold, predicted)
-
-    """precision_neg, recall_neg, f1_neg, _ = precision_recall_fscore_support(gold, predicted,
-                                                                           average="binary", pos_label="negative")
-    precision_pos, recall_pos, f1_pos, _ = precision_recall_fscore_support(gold, predicted,
-                                                                           average="binary", pos_label="positive")"""
-    if verbose:
-        print("Precision (macro-average): ", precision_macro)
-        print("Recall (macro-average): ", recall_macro)
-        print("F1-Score (macro-average): ", f1_macro)
-        print("Accuracy: ", acc_macro)
-
-        """print()
-
-        print("Precision (negative): ", precision_neg)
-        print("Recall (negative): ", recall_neg)
-        print("F1-Score (negative: ", f1_neg)
-
-        print()
-
-        print("Precision (positive): ", precision_pos)
-        print("Recall (positive): ", recall_pos)
-        print("F1-Score (positive): ", f1_pos)"""
-
-    return precision_macro, recall_macro, f1_macro, acc_macro
-
 if __name__ == '__main__':
     # read training data
     train, labels = read_train_data(["../data/training_movie_reviews.txt"])
@@ -227,7 +169,7 @@ if __name__ == '__main__':
     # read test data from English movie reviews
     test, gold = [], []
     neg, pos = 0, 0
-    with open("../data/test_movie_reviews_english_tokenized.csv") as f:
+    with open("../data/test_movie_reviews_english_tokenized.csv", "r", encoding="UTF-8") as f:
         csv_reader = csv.reader(f, delimiter=";")
 
         for row in csv_reader:
@@ -248,7 +190,7 @@ if __name__ == '__main__':
 
     print("English data:")
 
-    C = 15.5
+    C = 375
 
     pred, tpl = sentiment_classifier(train, labels, preprocessed_test, C=C)
 
@@ -274,7 +216,7 @@ if __name__ == '__main__':
 
     print("\nGerman data:")
     print("\n-----DeepL translations-----")
-    C = 15.5
+    C = 375
     pred2,_ = sentiment_classifier(train, labels, preprocessed_test2, C=C)
     print(len(pred2))
     print("\nEvaluation SVM")
@@ -286,22 +228,29 @@ if __name__ == '__main__':
 
     # test Google translations
 
-    print("\n-----Google translations-----")
+    print("\n-----Transformer translations-----")
 
     test3, gold3 = [], []
-    with open("../data/google_translated_german_test_data.csv", "r", encoding="UTF-8") as t2_file:
+    with open("../data/other_translated_german_test_data.csv", "r", encoding="UTF-8") as t2_file:
         csv_reader = csv.reader(t2_file, delimiter=";")
-
+        pos, neg = 0,0
         for row in csv_reader:
             if len(row) == 2:
-                test3.append(row[1])
-                gold3.append(row[0])
+                if row[0] == "negative" and neg < 1000:
+                    neg += 1
+                    gold3.append(row[0])
+                    test3.append(row[1])
+
+                elif row[0] == "positive" and pos < 1000:
+                    pos += 1
+                    gold3.append(row[0])
+                    test3.append(row[1])
 
     preprocessed_test3 = preprocess(test3)
 
-    C = 15.5
+    C = 375
 
-    pred3,_ = sentiment_classifier(train, labels, preprocessed_test3, C=C)
+    pred3,_ = sentiment_classifier(train, labels, preprocessed_test3, C=C, save_pred=True, y_test=gold3, filename="de-en_other")
     print("\nEvaluation SVM")
     _, _, _, _ = evaluate(gold3, pred3, verbose=True)
 
@@ -331,7 +280,7 @@ if __name__ == '__main__':
                     test4.append(row[1])
 
     preprocessed_test4 = preprocess(test4)
-    C = 15.5
+    C = 375
     pred4, _ = sentiment_classifier(train, labels, preprocessed_test4, C=C)
     print("\nEvaluation SVM")
     _, _, _, _ = evaluate(gold4, pred4, verbose=True)
